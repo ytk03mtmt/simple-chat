@@ -18,7 +18,7 @@
   <button id="send">送信</button>
 
   <script>
-    const ws = new WebSocket("wss://" + location.host + "/ws");
+    const ws = new WebSocket("wss://" + location.hostname + "/ws");
     const chat = document.getElementById("chat");
     const username = document.getElementById("username");
     const message = document.getElementById("message");
