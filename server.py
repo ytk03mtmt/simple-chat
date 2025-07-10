@@ -24,7 +24,7 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             print(f"受信: {data}")
             for client in clients:
-                await client.send_text(data)
-                except WebSocketDisconnect:
+                await client.send_text(data)  # 自分にも送るように修正
+    except WebSocketDisconnect:
         print("切断されました")
         clients.remove(websocket)
