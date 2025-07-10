@@ -1,12 +1,18 @@
-# server.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from typing import List
 
 app = FastAPI()
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+# 静的ファイルは /static 以下に提供
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 clients: List[WebSocket] = []
+
+@app.get("/")
+async def get():
+    return FileResponse("static/index.html")
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -23,4 +29,3 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         print("切断されました")
         clients.remove(websocket)
-
