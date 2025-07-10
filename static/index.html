@@ -24,6 +24,13 @@
     const message = document.getElementById("message");
     const send = document.getElementById("send");
 
+    ws.onerror = (event) => {
+    const errorMsg = document.createElement("div");
+    errorMsg.textContent = "接続エラー: WebSocketに接続できませんでした";
+    chat.appendChild(errorMsg);
+    };
+
+
     ws.onmessage = (event) => {
       const msg = document.createElement("div");
       msg.textContent = event.data;
