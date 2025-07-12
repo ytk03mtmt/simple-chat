@@ -1,10 +1,18 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from typing import List
-from datetime import datetime  # ←追加
+from datetime import datetime
 
 app = FastAPI()
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+# 静的ファイルを /static にマウント
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# "/" にアクセスされたときは index.html を返すようにする
+@app.get("/")
+async def read_index():
+    return FileResponse("static/index.html")
 
 clients: List[WebSocket] = []
 
@@ -16,8 +24,8 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")  # ←時刻追加
-            message = f"{now} {data}"  # ←元のメッセージに時刻を付ける
+            now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+            message = f"{now} {data}"
             print(f"送信: {message}")
             for client in clients:
                 await client.send_text(message)
