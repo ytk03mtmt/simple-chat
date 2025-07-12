@@ -1,43 +1,48 @@
-# server.py
 import os
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from typing import List
+from fastapi.templating import Jinja2Templates
 from datetime import datetime
 import shutil
 
 app = FastAPI()
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+templates = Jinja2Templates(directory="templates")
 
-clients: List[WebSocket] = []
+UPLOAD_DIR = "static/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+connections = set()
+
+@app.get("/", response_class=HTMLResponse)
+async def get(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    clients.append(websocket)
+    connections.add(websocket)
     try:
         while True:
-            data = await websocket.receive_json()
-            username = data.get("username")
-            message = data.get("message")
-            timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-            if message:
-                msg = f'{timestamp} {username}: {message}'
-                for client in clients:
-                    await client.send_text(msg)
+            data = await websocket.receive_text()
+            now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+            message = f"{now} {data}"
+            for conn in connections:
+                await conn.send_text(message)
     except WebSocketDisconnect:
-        clients.remove(websocket)
+        connections.remove(websocket)
 
 @app.post("/upload")
-async def upload_file(file: UploadFile, username: str = Form(...)):
-    filename = file.filename
-    save_path = f"static/uploads/{filename}"
-    os.makedirs("static/uploads", exist_ok=True)
-    with open(save_path, "wb") as buffer:
+async def upload_file(file: UploadFile = File(...)):
+    filepath = os.path.join(UPLOAD_DIR, file.filename)
+    with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    message = f'{timestamp} {username}: FILE: <a href="/uploads/{filename}" download>{filename}</a>'
-    for client in clients:
-        await client.send_text(message)
-    return {"result": "ok"}
+
+    now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    message = f'{now} FILE:<a href="/static/uploads/{file.filename}" target="_blank">{file.filename}</a>'
+
+    for conn in connections:
+        await conn.send_text(message)
+    return {"filename": file.filename}
