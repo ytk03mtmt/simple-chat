@@ -1,81 +1,43 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from typing import List
-from datetime import datetime
-
-app = FastAPI()
-
-# 静的ファイルを /static にマウント
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# "/" にアクセスされたときは index.html を返すようにする
-@app.get("/")
-async def read_index():
-    return FileResponse("static/index.html")
-
-clients: List[WebSocket] = []
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    print("接続しました")
-    clients.append(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-            message = f"{now} {data}"
-            print(f"送信: {message}")
-            for client in clients:
-                await client.send_text(message)
-    except WebSocketDisconnect:
-        print("切断されました")
-        clients.remove(websocket)
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from typing import List
-from datetime import datetime
+# server.py
 import os
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, Form
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from typing import List
+from datetime import datetime
 import shutil
 
 app = FastAPI()
-
-# ファイル保存用ディレクトリ
-UPLOAD_DIR = "uploaded"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# 静的ファイルマウント
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
-
-@app.get("/")
-async def read_index():
-    return FileResponse("static/index.html")
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 clients: List[WebSocket] = []
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("接続しました")
     clients.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
-            now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-            message = f"{now} {data}"
-            print(f"送信: {message}")
-            for client in clients:
-                await client.send_text(message)
+            data = await websocket.receive_json()
+            username = data.get("username")
+            message = data.get("message")
+            timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+            if message:
+                msg = f'{timestamp} {username}: {message}'
+                for client in clients:
+                    await client.send_text(msg)
     except WebSocketDisconnect:
-        print("切断されました")
         clients.remove(websocket)
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
+async def upload_file(file: UploadFile, username: str = Form(...)):
+    filename = file.filename
+    save_path = f"static/uploads/{filename}"
+    os.makedirs("static/uploads", exist_ok=True)
+    with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return file.filename
+    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    message = f'{timestamp} {username}: FILE: <a href="/uploads/{filename}" download>{filename}</a>'
+    for client in clients:
+        await client.send_text(message)
+    return {"result": "ok"}
