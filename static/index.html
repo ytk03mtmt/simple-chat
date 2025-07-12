@@ -2,50 +2,67 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Simple Web Messenger</title>
+  <title>Simple Chat</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    #chat { width: 100%; height: 300px; border: 1px solid #ccc; overflow-y: scroll; margin-bottom: 10px; padding: 10px; }
-    #message { width: 80%; }
-    #send { width: 15%; }
+    #messages { height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
+    input, textarea { width: 100%; }
   </style>
 </head>
 <body>
-  <h2>Simple Web Messenger</h2>
-  <input id="username" placeholder="ユーザー名" />
-  <div id="chat"></div>
-  <input id="message" placeholder="メッセージ入力" />
-  <button id="send">送信</button>
+  <h1>Simple Chat</h1>
+  <div id="messages"></div>
+  
+  <!-- ファイル送信 -->
+  <form id="uploadForm">
+    <input type="file" id="fileInput" />
+    <button type="submit">送信（ファイル）</button>
+  </form>
+
+  <!-- メッセージ送信 -->
+  <textarea id="messageInput" rows="2" placeholder="メッセージを入力（Enterで送信、Shift+Enterで改行）"></textarea>
 
   <script>
-    const ws = new WebSocket("wss://" + location.hostname + "/ws");
-    const chat = document.getElementById("chat");
-    const username = document.getElementById("username");
-    const message = document.getElementById("message");
-    const send = document.getElementById("send");
+    const ws = new WebSocket("wss://" + location.host + "/ws");
+    const messages = document.getElementById("messages");
+    const input = document.getElementById("messageInput");
 
-    ws.onerror = (event) => {
-    const errorMsg = document.createElement("div");
-    errorMsg.textContent = "接続エラー: WebSocketに接続できませんでした";
-    chat.appendChild(errorMsg);
+    ws.onmessage = function(event) {
+      const message = document.createElement("div");
+      if (event.data.startsWith("FILE:")) {
+        const [_, filename] = event.data.split(":", 2);
+        message.innerHTML = `📎 <a href="/files/${filename}" target="_blank">${filename}</a>`;
+      } else {
+        message.textContent = event.data;
+      }
+      messages.appendChild(message);
+      messages.scrollTop = messages.scrollHeight;
     };
 
+    // Enterで送信、Shift+Enterで改行
+    input.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (text) {
+          ws.send(text);
+          input.value = "";
+        }
+      }
+    });
 
-    ws.onmessage = (event) => {
-      const msg = document.createElement("div");
-      msg.textContent = event.data;
-      chat.appendChild(msg);
-      chat.scrollTop = chat.scrollHeight;
-    };
+    // ファイルアップロード
+    document.getElementById("uploadForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("file", file);
 
-    send.onclick = () => {
-      if (!username.value || !message.value) return;
-      ws.send(`${username.value}: ${message.value}`);
-      message.value = "";
-    };
-
-    message.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") send.click();
+      fetch("/upload", { method: "POST", body: formData })
+        .then(res => res.text())
+        .then(filename => {
+          ws.send("FILE:" + filename);
+        });
     });
   </script>
 </body>
